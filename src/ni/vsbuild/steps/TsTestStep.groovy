@@ -2,13 +2,13 @@ package ni.vsbuild.steps
 
 import ni.vsbuild.BuildConfiguration
 
-class TsTestStep extends AbstractStep {
+class TsTestStep extends LvStep {
 
    def seqPath
    def tsVersion
    def tsBitness
 
-   TsTestStep(script, mapStep) {
+   TsTestStep(script, mapStep, lvVersion) {
       this.script = script
       this.seqPath = mapStep.get('sequence_path')
       this.tsVersion = mapStep.get('teststand_version')
