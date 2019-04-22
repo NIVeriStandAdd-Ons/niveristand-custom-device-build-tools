@@ -9,7 +9,7 @@ class TsTestStep extends LvStep {
    def tsBitness
 
    TsTestStep(script, mapStep, lvVersion) {
-      this.script = script
+      super(script, mapStep, lvVersion)
       this.seqPath = mapStep.get('sequence_path')
       this.tsVersion = mapStep.get('teststand_version')
       this.tsBitness = mapStep.get('teststand_bitness')
