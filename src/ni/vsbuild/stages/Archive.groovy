@@ -4,10 +4,15 @@ import ni.vsbuild.BuildConfiguration
 
 class Archive extends AbstractStage {
 
-   private String archiveLocation
+   private static final String MANIFEST_ARCHIVE_DIR = 'installer'
 
-   Archive(script, configuration, lvVersion) {
+   private String archiveLocation
+   private String manifestFile
+
+   Archive(script, configuration, lvVersion, manifestFile) {
       super(script, 'Archive', configuration, lvVersion)
+
+      this.manifestFile = manifestFile
    }
 
    void executeStage() {
@@ -20,16 +25,30 @@ class Archive extends AbstractStage {
          buildOutputDir = BuildConfiguration.STAGING_DIR
       }
 
-      script.copyFiles(buildOutputDir, "$archiveLocation\\$lvVersion")
+      def versionedArchive = "$archiveLocation\\$lvVersion"
+      script.copyFiles(buildOutputDir, versionedArchive)
+
+      archiveManifest(versionedArchive)
 
       setArchiveVar()
    }
 
    // Builds a string of the form <archiveLocation>\\export\\<branch>\\<build_number>
    private void setArchiveLocation() {
-      archiveLocation = configuration.archive.get('archive_location') +
-         "\\${script.getComponentParts()['organization']}" +
-         "\\export\\${script.env.BRANCH_NAME}\\" +
+      def organization = script.getComponentParts()['organization']
+
+      // Organization may not exist for multibranch pipelines not using
+      // the GitHub Branch Source Plugin
+      if(!organization) {
+         organization = ''
+      }
+      else {
+         organization = "$organization\\"
+      }
+
+      archiveLocation = "${configuration.archive.get('archive_location')}\\" +
+         "$organization" +
+         "export\\${script.env.BRANCH_NAME}\\" +
          "Build ${script.currentBuild.number}"
    }
 
@@ -38,5 +57,17 @@ class Archive extends AbstractStage {
       def component = script.getComponentParts()['repo']
       def depDir = "${component}_DEP_DIR"
       script.env."$depDir" = archiveLocation
+   }
+   
+   private void archiveManifest(String versionedArchive) {
+      def splitIndex = manifestFile.lastIndexOf('/')
+      def manifestFileName = manifestFile.substring(splitIndex + 1)
+      
+      def versionedInstallerDir = "$versionedArchive\\$MANIFEST_ARCHIVE_DIR"
+
+      if(!script.fileExists("$versionedInstallerDir\\$manifestFileName")) {
+         def manifestDirectory = manifestFile.take(splitIndex)
+         script.copyFiles(manifestDirectory, versionedInstallerDir, [files: manifestFileName])
+      }
    }
 }

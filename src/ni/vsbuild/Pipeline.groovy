@@ -17,12 +17,14 @@ class Pipeline implements Serializable {
       def script
       BuildConfiguration buildConfiguration
       String lvVersion
+      String manifestFile
       def stages = []
 
-      Builder(def script, BuildConfiguration buildConfiguration, String lvVersion) {
+      Builder(def script, BuildConfiguration buildConfiguration, String lvVersion, String manifestFile) {
          this.script = script
          this.buildConfiguration = buildConfiguration
          this.lvVersion = lvVersion
+         this.manifestFile = manifestFile
       }
 
       def withCodegenStage() {
@@ -42,7 +44,7 @@ class Pipeline implements Serializable {
       }
 
       def withArchiveStage() {
-         stages << new Archive(script, buildConfiguration, lvVersion)
+         stages << new Archive(script, buildConfiguration, lvVersion, manifestFile)
       }
 
       // The plan is to enable automatic merging from master to
@@ -107,10 +109,10 @@ class Pipeline implements Serializable {
             script.node(nodeLabel) {
                setup(lvVersion)
 
-               def configuration = BuildConfiguration.load(script, JSON_FILE)
+               def configuration = BuildConfiguration.load(script, JSON_FILE, lvVersion)
                configuration.printInformation(script)
 
-               def builder = new Builder(script, configuration, lvVersion)
+               def builder = new Builder(script, configuration, lvVersion, MANIFEST_FILE)
                this.stages = builder.buildPipeline()
 
                executeStages()
@@ -119,6 +121,8 @@ class Pipeline implements Serializable {
       }
 
       script.parallel builders
+
+      validateBuild()
    }
 
    protected void executeStages() {
@@ -148,6 +152,31 @@ class Pipeline implements Serializable {
          // Write a manifest
          script.echo "Writing manifest to $MANIFEST_FILE"
          script.writeJSON file: MANIFEST_FILE, json: manifest, pretty: 3
+      }
+   }
+
+   // This method is here to catch builds with issue 50:
+   // https://github.com/ni/niveristand-custom-device-build-tools/issues/50
+   // If this issue is encountered, the build will still show success even
+   // though an export for the desired version is not actually created.
+   // We should fail the build instead of returning false success.
+   private void validateBuild() {      
+      String nodeLabel = ''
+      if (pipelineInformation.nodeLabel?.trim()) {
+         nodeLabel = pipelineInformation.nodeLabel
+      }
+
+      script.node(nodeLabel) {
+         script.stage("Validation") {
+            script.echo("Validating build output.")
+            def component = script.getComponentParts()['repo']
+            def exportDir = script.env."${component}_DEP_DIR"
+            pipelineInformation.lvVersions.each { version ->
+               if(!script.fileExists("$exportDir\\$version")) {
+                  script.failBuild("Failed to build version $version. See issue: https://github.com/ni/niveristand-custom-device-build-tools/issues/50")
+               }
+            }
+         }
       }
    }
 }
